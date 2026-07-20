@@ -32,7 +32,7 @@ def deploy():
 def run_deploy():
   try:
     subprocess.run(["git", "pull"], cwd="/root/apps/startup-docs")
-    subprocess.run(["mkdocs", "build"], cwd="/root/apps/startup-docs")
+    subprocess.run(["/root/apps/startup-docs/.venv/bin/mkdocs", "build"], cwd="/root/apps/startup-docs")
 
     shutil.copytree("/root/apps/startup-docs/site", "/var/www/html_new")
 
