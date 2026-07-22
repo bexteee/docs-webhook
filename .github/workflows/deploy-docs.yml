@@ -1,0 +1,72 @@
+name: PR merge action
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+jobs:
+  deploy:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print PR Number
+        run: echo "The current PR number is ${{ github.event.pull_request.number }}"
+
+      - name: Fetch PR diff
+        run: 'curl -o pr_diff.txt -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"  -H "Accept: application/vnd.github.diff" https://api.github.com/repos/bexteee/docs-webhook/pulls/${{ github.event.pull_request.number }}'
+        
+      - name: Generate PR summary
+        run: |
+          jq -n --arg diff_content "$(cat pr_diff.txt)" --arg prompt_text "Resuma em português as mudanças desta pull request, com foco em documentação técnica: " '{model: "claude-sonnet-4-5", max_tokens: 1024, messages: [{role: "user", content: ($prompt_text + $diff_content)}]}' > request_body.json
+
+      - name: Call Anthropic API
+        run: |
+          curl -o response.json https://api.anthropic.com/v1/messages \
+          -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+          -H "anthropic-version: 2023-06-01" \
+          -H "content-type: application/json" \
+          -d @request_body.json
+
+      - name: Extract summary text
+        run: |
+          jq -r '.content[0].text' response.json > summary.txt
+
+      - name: Checkout External Repo
+        uses: actions/checkout@v7
+        with:
+          repository: bexteee/startup-docs
+          path: 'external-code'
+          token: ${{ secrets.STARTUP_DOCS_TOKEN }}
+      
+      - name: Update changelog
+        run: |
+          TODAY=$(date +%F)
+          echo -e "## PR #${{ github.event.pull_request.number }} - $TODAY\n\n$(cat summary.txt)\n" > entry.md
+          echo "" >> external-code/docs/changelog.md
+          cat entry.md >> external-code/docs/changelog.md
+      
+      - name: Commit and push
+        run: |
+          cd external-code
+          git config --local user.email "automation-bot@example.com"
+          git config --local user.name "github-actions[bot]"
+          git add .
+          if git diff --staged --quiet; then
+            echo "Nenhuma mudança para commitar"
+          else
+            git commit -m "chore: automated file update"
+            git push
+          fi
+
+      - name: Webhook trigger
+        run: |
+          curl -X POST -H "Authorization: Bearer ${{ secrets.WEBHOOK_SECRET }}" http://142.93.63.249/deploy
+          
+      
+      
+
+        
+  
