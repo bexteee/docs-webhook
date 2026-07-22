@@ -19,7 +19,7 @@ def deploy():
   if len(full_key) < 2:
     return jsonify({"status": "invalid list"}), 400
   
-  if hmac.compare_digest(webhook_key, full_key[1]):
+  if hmac.compare_digest(webhook_key, full_key[1]): # comparacao da ssh key verdadeira com o que esta na string full_key
     result = run_deploy()
 
     if result is True:
