@@ -12,15 +12,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
       - name: Print PR Number
         run: echo "The current PR number is ${{ github.event.pull_request.number }}"
 
       - name: Fetch PR diff
         run: 'curl -o pr_diff.txt -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"  -H "Accept: application/vnd.github.diff" https://api.github.com/repos/bexteee/docs-webhook/pulls/${{ github.event.pull_request.number }}'
-        
-      - name: Generate PR summary
+
+      - name: Build request with context
         run: |
-          jq -n --arg diff_content "$(cat pr_diff.txt)" --arg prompt_text "Resuma em português as mudanças desta pull request, com foco em documentação técnica: " '{model: "claude-sonnet-4-5", max_tokens: 1024, messages: [{role: "user", content: ($prompt_text + $diff_content)}]}' > request_body.json
+          jq -n --arg diff_content "$(cat pr_diff.txt)" --arg prompt_text $'Você vai receber o README de um projeto, seguido do diff de uma pull request. Use o README como contexto para entender a arquitetura e os termos técnicos do projeto. Depois, resuma em português as mudanças da pull request, com foco em documentação técnica, usando os termos corretos do projeto (não invente significados para variáveis ou componentes que não estão explicados).README do projeto:\n\n' --arg bridge_text $'\n\nAgora, com esse contexto, resuma as mudanças desta pull  request:\n\n' --arg read_file "$(cat README.md)" '{model: "claude-sonnet-4-5", max_tokens: 1024, messages: [{role: "user", content: ($prompt_text + $read_file + $bridge_text + $diff_content)}]}' > request_body.json
 
       - name: Call Anthropic API
         run: |
