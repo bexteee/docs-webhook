@@ -89,7 +89,7 @@ def context_search():
 
         diff_embeddings = response.embeddings[0]
 
-        cur.execute("SELECT content, source_document FROM document_chunks ORDER BY embedding <=> %s LIMIT 5", (diff_embeddings,))
+        cur.execute("SELECT content, source_document FROM document_chunks ORDER BY embedding <=> %s::vector LIMIT 5", (diff_embeddings,))
         rows = cur.fetchall()
 
         results = []
