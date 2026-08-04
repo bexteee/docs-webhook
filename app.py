@@ -2,11 +2,13 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import os, hmac, subprocess, shutil
 import psycopg2
+import voyageai
 
 app = Flask(__name__)
 
 load_dotenv()
 webhook_key = os.getenv("WEBHOOK_SECRET")
+vo = voyageai.Client()
 
 @app.route('/deploy', methods=['POST'])
 def deploy():
@@ -59,6 +61,47 @@ def deploy():
 
       return jsonify({"status" : "not received"}), 401
 
+@app.route('/context_search', methods=['POST'])
+def context_search():
+  database_url = os.getenv("DATABASE_URL")
+
+  with psycopg2.connect(database_url) as conn:
+    with conn.cursor() as cur:
+      auth_header = request.headers.get('Authorization')
+
+      if auth_header is None:
+        return jsonify({"status": "not received"}), 401
+
+      full_key = auth_header.split()
+
+      if len(full_key) < 2:
+        return jsonify({"status": "invalid list"}), 400
+
+      if hmac.compare_digest(webhook_key, full_key[1]):
+        data = request.get_json()
+        pr_diff = data.get('diff')
+
+        response = vo.embed(
+          texts=[pr_diff] ,
+          model="voyage-3.5-lite" ,
+          input_type="query"
+        )
+
+        diff_embeddings = response.embeddings[0]
+
+        cur.execute("SELECT content, source_document FROM document_chunks ORDER BY embedding <=> %s LIMIT 5", (diff_embeddings,))
+        rows = cur.fetchall()
+
+        results = []
+
+        for row in rows:
+          results.append(row[0])
+
+        return jsonify({"status": "received", "chunks": results}), 200
+
+      else:
+        return jsonify({"status": "Unauthorized"}), 401
+
 def run_deploy():
   try:
     subprocess.run(["git", "pull"], cwd="/root/apps/startup-docs")
@@ -77,6 +120,6 @@ def run_deploy():
   except Exception as e:
     error = str(e)
     return error
-  
+
 if __name__ == "__main__":
   app.run()
