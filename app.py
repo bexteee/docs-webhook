@@ -62,7 +62,7 @@ def deploy():
       return jsonify({"status" : "not received"}), 401
 
 @app.route('/context_search', methods=['POST'])
-def context_search():
+def context_search(): # RAG integration test
   database_url = os.getenv("DATABASE_URL")
 
   with psycopg2.connect(database_url) as conn:

@@ -21,9 +21,17 @@ jobs:
       - name: Fetch PR diff
         run: 'curl -o pr_diff.txt -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}"  -H "Accept: application/vnd.github.diff" https://api.github.com/repos/bexteee/docs-webhook/pulls/${{ github.event.pull_request.number }}'
 
+      - name: Search relevant context
+        run: |
+          curl -X POST http://142.93.63.249/context_search \
+          -H "Authorization: Bearer ${{ secrets.WEBHOOK_SECRET }}" \
+          -H "Content-Type: application/json" \
+          -d "{\"diff\": $(jq -Rs . < pr_diff.txt)}" \
+          -o context.json
+
       - name: Build request with context
         run: |
-          jq -n --arg diff_content "$(cat pr_diff.txt)" --arg prompt_text $'Você vai receber o README de um projeto, seguido do diff de uma pull request. Use o README como contexto para entender a arquitetura e os termos técnicos do projeto. Depois, resuma em português as mudanças da pull request, com foco em documentação técnica, usando os termos corretos do projeto (não invente significados para variáveis ou componentes que não estão explicados).\n\nFormate sua resposta EXATAMENTE neste padrão, sem adicionar nenhum título, subtítulo ou seção diferente deste:\n\n### Resumo das Mudanças\n\n- [primeiro ponto sobre o que mudou]\n- [segundo ponto, se houver]\n- [terceiro ponto, se houver]\n\n### Impacto\n\n- [breve descrição do impacto desta mudança]\n\nNão inclua nenhuma outra seção além de \'Resumo das Mudanças\' e \'Impacto\'.\n\nREADME do projeto:\n\n' --arg bridge_text $'\n\nAgora, com esse contexto, resuma as mudanças desta pull  request:\n\n' --arg read_file "$(cat README.md)" '{model: "claude-sonnet-4-5", max_tokens: 1024, messages: [{role: "user", content: ($prompt_text + $read_file + $bridge_text + $diff_content)}]}' > request_body.json
+          jq -n --arg diff_content "$(cat pr_diff.txt)" --arg prompt_text $'Você vai receber trechos relevantes da documentação de um projeto, seguido do diff de uma pull request. Use esses trechos como contexto para entender a arquitetura e os termos técnicos do projeto. Depois, resuma em português as mudanças da pull request, com foco em documentação técnica, usando os termos corretos do projeto (não invente significados para variáveis ou componentes que não estão explicados).\n\nFormate sua resposta EXATAMENTE neste padrão, sem adicionar nenhum título, subtítulo ou seção diferente deste:\n\n### Resumo das Mudanças\n\n- [primeiro ponto sobre o que mudou]\n- [segundo ponto, se houver]\n- [terceiro ponto, se houver]\n\n### Impacto\n\n- [breve descrição do impacto desta mudança]\n\nNão inclua nenhuma outra seção além de \'Resumo das Mudanças\' e \'Impacto\'.\n\nTrechos relevantes da documentação:\n\n' --arg bridge_text $'\n\nAgora, com esse contexto, resuma as mudanças desta pull  request:\n\n' --arg read_file "$(jq -r '.chunks | join("\n\n")' context.json)" '{model: "claude-sonnet-4-5", max_tokens: 1024, messages: [{role: "user", content: ($prompt_text + $read_file + $bridge_text + $diff_content)}]}' > request_body.json
 
       - name: Call Anthropic API
         run: |
